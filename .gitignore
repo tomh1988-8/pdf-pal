@@ -1,0 +1,24 @@
+# R history and session files
+.Rhistory
+
+# R data files
+*.RData
+*.rda
+
+# R Studio project files
+*.Rproj
+.Rproj.user/
+
+# Log files
+*.log
+
+# Temporary files created by R
+*.tmp
+*.temp
+
+# PDF files and the pdfs folder
+pdfs/
+*.pdf
+
+# Excel
+*.xlsx
