@@ -7,6 +7,7 @@ library(stringr)
 library(pdftools)
 library(here)
 library(writexl)
+library(tesseract)
 
 ################## FUNCTION TO STRIP ONE DOC ###################################
 #######################################################################
@@ -55,11 +56,16 @@ extract_questions_from_pdf <- function(pdf_file_path) {
   total_pages <- length(ocr_pages)
 
   # Combine the pages into a single data frame of lines with a page number indicator.
-  combined_lines <- map2_dfr(ocr_pages, seq_along(ocr_pages),
-                             ~ tibble(page = .y,
-                                      line = str_split(.x, "\n")[[1]] %>%
-                                        str_trim() %>%
-                                        discard(~ .x == "")))
+  combined_lines <- map2_dfr(
+    ocr_pages,
+    seq_along(ocr_pages),
+    ~ tibble(
+      page = .y,
+      line = str_split(.x, "\n")[[1]] %>%
+        str_trim() %>%
+        discard(~ .x == "")
+    )
+  )
 
   # We'll extract candidate questions from the combined text.
   # Candidate questions are either:
@@ -69,8 +75,8 @@ extract_questions_from_pdf <- function(pdf_file_path) {
 
   # Identify indices by two methods:
   question_indices_1 <- grep("\\?$", lines)
-  question_indices_2 <- which(sapply(1:(length(lines)-1), function(i) {
-    str_detect(lines[i+1], "Yes") & str_detect(lines[i+1], "No")
+  question_indices_2 <- which(sapply(1:(length(lines) - 1), function(i) {
+    str_detect(lines[i + 1], "Yes") & str_detect(lines[i + 1], "No")
   }))
   question_indices <- sort(unique(c(question_indices_1, question_indices_2)))
 
@@ -106,19 +112,39 @@ extract_questions_from_pdf <- function(pdf_file_path) {
   # 2. If "No" is followed by © (after optional whitespace), then that implies yes is checked.
   # 3. Otherwise, "No" is checked if followed by one of the checked patterns.
   qa_df <- qa_df %>%
-    mutate(yn = case_when(
-      str_detect(answer, regex("Yes\\s*(\\(x\\)|\\(«\\)|««\\)|\\(««\\)|«\\))", ignore_case = TRUE)) ~ "y",
-      str_detect(answer, regex("No\\s*©", ignore_case = TRUE)) ~ "y",
-      str_detect(answer, regex("No\\s*(\\(x\\)|\\(«\\)|««\\)|\\(««\\)|«\\))", ignore_case = TRUE)) ~ "n",
-      TRUE ~ NA_character_
-    ))
+    mutate(
+      yn = case_when(
+        str_detect(
+          answer,
+          regex(
+            "Yes\\s*(\\(x\\)|\\(«\\)|««\\)|\\(««\\)|«\\))",
+            ignore_case = TRUE
+          )
+        ) ~
+          "y",
+        str_detect(answer, regex("No\\s*©", ignore_case = TRUE)) ~ "y",
+        str_detect(
+          answer,
+          regex(
+            "No\\s*(\\(x\\)|\\(«\\)|««\\)|\\(««\\)|«\\))",
+            ignore_case = TRUE
+          )
+        ) ~
+          "n",
+        TRUE ~ NA_character_
+      )
+    )
 
   return(qa_df)
 }
 
 ########################## USAGE ################################################
 # List all PDF files in the "pdfs" folder
-pdf_files <- list.files(path = here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
+pdf_files <- list.files(
+  path = here("pdfs"),
+  pattern = "\\.pdf$",
+  full.names = TRUE
+)
 
 # Initialize an empty list to store results for each file
 results_list <- list()

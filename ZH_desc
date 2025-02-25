@@ -1,0 +1,36 @@
+
+################################ CONTEXT #######################################
+I have stored 10 pdfs here (all forms and contents are identical, even the yes/no answers,
+because I was sent completely different forms (i.e. different set of questions)
+instead of the same form with different answers, which is what I requested / expected
+
+################################ UPDATE ########################################
+I went through the final form with a colleague earlier today and
+realised that there are a few more points to note and possibly some
+tweaks to make based on these:
+
+
+################################ TWEAK 1 ---------------------------------------
+· Eventually, there will be three different forms and each form will be completed 390 times
+but I’m hoping that the R solution will hopefully work for all of them because
+they have different questions but have a similar format.
+
+
+################################ TWEAK 2 ---------------------------------------
+· Some questions will have a ‘Not applicable’ option as well as the yes/no options,
+which we’ll need to capture (included in the pdfs I’ve shared with you and example shown below).
+
+
+################################ TWEAK 3 ---------------------------------------
+· Most questions will end with a question mark, but there are some exceptions in case that makes a difference:
+**** THIS IS ALREADY ACCOUNTED FOR IN THE CODE.
+
+
+################################ TWEAK 4 ---------------------------------------
+There is some additional text between the question and yes/no options (see example below):
+
+
+################################ TWEAK 5 ---------------------------------------
+There is no question mark at the end of the question and no yes/no options, just a text box for comments:
+· And as mentioned, it will be great if any comments in the text boxes are shown in the same row as the answers (yes/no/na).
+
