@@ -266,9 +266,88 @@ extract_questions_context <- function(pdf_file) {
   as.data.frame(result, stringsAsFactors = FALSE)
 }
 
-# ------------------ Example Usage ------------------
+################################# Example Usage --------------------------------
 # Assume your PDFs are stored in the "pdfs" subdirectory.
+# pdf_files <- list.files(here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
+# first_pdf_file <- pdf_files[1]
+# qc_df <- extract_questions_context(first_pdf_file)
+# print(qc_df)
+
+########################## extract_answers_from_pdf ############################
+extract_answers_by_question <- function(pdf_file) {
+  # Use OCR to extract text from all pages.
+  ocr_pages <- pdf_ocr_text(pdf_file)
+  full_text <- paste(ocr_pages, collapse = "\n")
+
+  # Split into lines and clean whitespace.
+  lines <- str_trim(unlist(str_split(full_text, "\n")))
+  lines <- lines[lines != ""]
+
+  answers <- list()
+  i <- 1
+  while (i <= length(lines)) {
+    # Case 1: A candidate Yes/No answer line (contains both "Yes" and "No").
+    if (
+      str_detect(lines[i], regex("Yes", ignore_case = TRUE)) &&
+        str_detect(lines[i], regex("No", ignore_case = TRUE))
+    ) {
+      answers[[length(answers) + 1]] <- lines[i]
+      i <- i + 1
+    } else if (
+      # Case 2: A candidate textbox answer that begins with the prompt.
+      str_detect(
+        lines[i],
+        regex(
+          "^Please provide any other information that you think may be relevant",
+          ignore_case = TRUE
+        )
+      )
+    ) {
+      answer_block <- lines[i]
+      i <- i + 1
+      # Continue concatenating subsequent non-empty lines until a blank is found or a new candidate answer is detected.
+      while (
+        i <= length(lines) &&
+          lines[i] != "" &&
+          !(str_detect(lines[i], regex("Yes", ignore_case = TRUE)) &&
+            str_detect(lines[i], regex("No", ignore_case = TRUE))) &&
+          !str_detect(
+            lines[i],
+            regex("^Please provide any other information", ignore_case = TRUE)
+          )
+      ) {
+        answer_block <- paste(answer_block, lines[i], sep = " ")
+        i <- i + 1
+      }
+      answers[[length(answers) + 1]] <- answer_block
+    } else {
+      i <- i + 1
+    }
+  }
+
+  # Build the output data frame with the file name as the first column.
+  result <- data.frame(file = basename(pdf_file), stringsAsFactors = FALSE)
+  for (k in seq_along(answers)) {
+    result[[paste0("question_", k)]] <- answers[[k]]
+  }
+
+  # pivot longer to make the next step easier
+  result <- result %>%
+    pivot_longer(
+      cols = starts_with("question_"),
+      names_to = "question_number",
+      values_to = "answer",
+      values_drop_na = TRUE
+    )
+
+  return(result)
+}
+
+################################# Example Usage --------------------------------
+# List all PDF files in the "pdfs" subdirectory.
 pdf_files <- list.files(here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
+
+# For testing, process the first PDF file.
 first_pdf_file <- pdf_files[1]
-qc_df <- extract_questions_context(first_pdf_file)
-print(qc_df)
+answers_df <- extract_answers_by_question(first_pdf_file)
+print(answers_df)
