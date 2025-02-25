@@ -344,10 +344,86 @@ extract_answers_by_question <- function(pdf_file) {
 }
 
 ################################# Example Usage --------------------------------
+# # List all PDF files in the "pdfs" subdirectory.
+# pdf_files <- list.files(here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
+#
+# # For testing, process the first PDF file.
+# first_pdf_file <- pdf_files[1]
+# answers_df <- extract_answers_by_question(first_pdf_file)
+# print(answers_df)
+
+########################## derive_answers ######################################
+process_answer <- function(ans) {
+  # If ans is NA or empty, return NA
+  if (is.na(ans) || ans == "") return(NA_character_)
+
+  # This pattern tries to capture 3 parts:
+  #   ^Yes\s*(.*?)\s+No\s*(.*?)  -> The Yes part is group 1, the No part is group 2
+  #   (?:\s+Not applicable\s*(.*))?  -> The Not applicable part is group 3, optional
+  #
+  # Explanation of the pattern:
+  #   ^Yes\s*                -> Start with "Yes" plus optional whitespace
+  #   (.*?)                  -> Capture as few chars as possible into group 1
+  #   \s+No\s*               -> Then "No" plus optional whitespace
+  #   (.*?)                  -> Capture as few chars as possible into group 2
+  #   (?:\s+Not applicable\s*(.*))? -> Optionally capture "Not applicable" plus remainder into group 3
+  pattern <- "^Yes\\s*(.*?)\\s+No\\s*(.*?)(?:\\s+Not\\s*applicable\\s*(.*))?$"
+  m <- str_match(ans, regex(pattern, ignore_case = TRUE))
+
+  # If we cannot parse, return NA
+  if (all(is.na(m))) {
+    return(NA_character_)
+  }
+
+  yes_part <- str_trim(m[2], side = "both")
+  no_part <- str_trim(m[3], side = "both")
+  na_part <- str_trim(m[4], side = "both")
+
+  # If we didn't actually capture a Not-applicable part, set it to ""
+  if (is.na(na_part)) {
+    na_part <- ""
+  }
+
+  # ----- Helper function to check if a portion is "empty" -----
+  is_empty <- function(x) {
+    x %in% c("O", "()")
+  }
+
+  # ----- Step 1: Check for « or «« in each portion -----
+  # If present in yes_part => "Y"; no_part => "N"; na_part => NA
+  has_quote <- function(x) str_detect(x, "«") # matches « or ««
+
+  if (has_quote(yes_part)) return("Y")
+  if (has_quote(no_part)) return("N")
+  if (has_quote(na_part)) return("NA")
+
+  # ----- Step 2: If no quotes, look for alternate markers in each portion. -----
+  # We'll consider ©, (x), or an x in a circle as an alternate marker.
+  # This can be adjusted to your OCR outputs.
+  alt_marker <- function(x) {
+    # "(x)" ignoring case, or "©", or possibly an 'x' in parentheses
+    str_detect(x, regex("\\(x\\)", ignore_case = TRUE)) ||
+      str_detect(x, fixed("©", ignore_case = TRUE))
+  }
+
+  # If the portion is not empty and has the marker => that portion is checked
+  # We check in the order Yes, No, NA. If multiple are marked, we pick the first match.
+
+  if (!is_empty(yes_part) && alt_marker(yes_part)) return("Y")
+  if (!is_empty(no_part) && alt_marker(no_part)) return("N")
+  if (!is_empty(na_part) && alt_marker(na_part)) return("NA")
+
+  # ----- Step 3: If we still haven't found a checked portion, default to "N" or NA. -----
+  return("N")
+}
+
+########################## EXAMPLE USAGE ---------------------------------------
 # List all PDF files in the "pdfs" subdirectory.
 pdf_files <- list.files(here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
-
 # For testing, process the first PDF file.
 first_pdf_file <- pdf_files[1]
+# run the extract_answers_by_question function
 answers_df <- extract_answers_by_question(first_pdf_file)
-print(answers_df)
+# process the answers
+processed_answers <- answers_df %>%
+  mutate(processed_answer = sapply(answer, process_answer))
