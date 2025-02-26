@@ -1,0 +1,12 @@
+# TH created several functions stored in functions script, load this script, i.e., just run it all
+# these functions can be used separately if you want to do your own things with them
+# in the execution script I've shown how to use them in combination to process one file, and then to loop through a folder
+# recommend using the renaming example for files, especially if they are long and start with a number, R does not like that
+# there is currently a quite simple heuristic for scoring the questions - this should be tested at larger scale
+# ocr is a bit heavy so with near a 1000 files it would take a few hours to run I guess, so would build in some preliminary tests to save time if we go ahead.
+
+### CONLUSION
+# it's good enough now to satisfy ourselves that a back-up is in place.
+# if it actually turns out we have to use it, i'll get involved in the actual run through and make sure its as bullet proof as possible.
+# that's probably all thats needed for now, i'll add you as collaborators on the repo, peace!
+# TH.
