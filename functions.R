@@ -65,6 +65,7 @@ process_pdf_files <- function(directory) {
 ########################## EXAMPLE USE -----------------------------------------
 # pdf_texts <- process_pdf_files(here("pdfs"))
 
+########################## extract_header_info #################################
 extract_header_info <- function(pdf_file) {
   # Extract the entire PDF as plain text (one element per page)
   pdf_pages <- pdf_text(pdf_file)
@@ -111,14 +112,24 @@ extract_header_info <- function(pdf_file) {
     completed_by <- workflow <- qa_submitted <- NA
   }
 
-  # Return the file name as the first column along with the header fields
-  data.frame(
+  # Create a wide-format data frame
+  wide_df <- data.frame(
     file = basename(pdf_file),
     completed_by = completed_by,
     workflow = workflow,
     qa_submitted = qa_submitted,
     stringsAsFactors = FALSE
   )
+
+  # Pivot the header fields into long format
+  long_df <- wide_df |>
+    pivot_longer(
+      cols = c(completed_by, workflow, qa_submitted),
+      names_to = "field",
+      values_to = "value"
+    )
+
+  return(long_df)
 }
 
 ################################# Example Usage --------------------------------
@@ -127,7 +138,7 @@ extract_header_info <- function(pdf_file) {
 # header_df <- extract_header_info(pdf_file)
 # print(header_df)
 
-########################## extract_pdf_data ####################################
+########################## extract_questions_context ####################################
 extract_questions_context <- function(pdf_file) {
   # --- Extract PDF data with font info enabled from all pages ---
   pdf_pages <- pdf_data(pdf_file, font_info = TRUE)
@@ -257,13 +268,22 @@ extract_questions_context <- function(pdf_file) {
   }
 
   # --- Build the output data frame ---
-  result <- list(file = basename(pdf_file))
+  result <- data.frame(file = basename(pdf_file), stringsAsFactors = FALSE)
+
   for (k in seq_along(questions)) {
-    result[[paste0("q", k)]] <- questions[[k]]
-    result[[paste0("context", k)]] <- contexts[[k]]
+    result[[paste0("question_", k)]] <- questions[[k]]
+    result[[paste0("context_", k)]] <- contexts[[k]]
   }
 
-  as.data.frame(result, stringsAsFactors = FALSE)
+  # Convert to long format
+  result <- pivot_longer(
+    result,
+    cols = -file, # Keep the "file" column, pivot the rest
+    names_to = "field",
+    values_to = "value"
+  )
+
+  return(result)
 }
 
 ################################# Example Usage --------------------------------
@@ -273,7 +293,7 @@ extract_questions_context <- function(pdf_file) {
 # qc_df <- extract_questions_context(first_pdf_file)
 # print(qc_df)
 
-########################## extract_answers_from_pdf ############################
+########################## extract_answers_by_question #########################
 extract_answers_by_question <- function(pdf_file) {
   # Use OCR to extract text from all pages.
   ocr_pages <- pdf_ocr_text(pdf_file)
@@ -344,15 +364,15 @@ extract_answers_by_question <- function(pdf_file) {
 }
 
 ################################# Example Usage --------------------------------
-# # List all PDF files in the "pdfs" subdirectory.
+# List all PDF files in the "pdfs" subdirectory.
 # pdf_files <- list.files(here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
-#
-# # For testing, process the first PDF file.
+# #
+# # # For testing, process the first PDF file.
 # first_pdf_file <- pdf_files[1]
 # answers_df <- extract_answers_by_question(first_pdf_file)
 # print(answers_df)
 
-########################## derive_answers ######################################
+########################## process_answer ######################################
 process_answer <- function(ans) {
   # If ans is NA or empty, return NA
   if (is.na(ans) || ans == "") return(NA_character_)
@@ -419,11 +439,129 @@ process_answer <- function(ans) {
 
 ########################## EXAMPLE USAGE ---------------------------------------
 # List all PDF files in the "pdfs" subdirectory.
-pdf_files <- list.files(here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
-# For testing, process the first PDF file.
-first_pdf_file <- pdf_files[1]
-# run the extract_answers_by_question function
-answers_df <- extract_answers_by_question(first_pdf_file)
-# process the answers
-processed_answers <- answers_df %>%
-  mutate(processed_answer = sapply(answer, process_answer))
+# pdf_files <- list.files(here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
+# # For testing, process the first PDF file.
+# first_pdf_file <- pdf_files[1]
+# # run the extract_answers_by_question function
+# answers_df <- extract_answers_by_question(first_pdf_file)
+# # process the answers
+# processed_answers <- answers_df %>%
+#   mutate(processed_answer = sapply(answer, process_answer))
+
+############################### collapse_paragraphs (helper) ###################
+############################### collapse_paragraphs (helper) ###################
+# Helper: Collapse OCR lines into paragraphs (a paragraph = consecutive nonblank lines).
+collapse_paragraphs <- function(lines) {
+  paragraphs <- character(0)
+  current_par <- ""
+  for (line in lines) {
+    if (line == "") {
+      if (current_par != "") {
+        paragraphs <- c(paragraphs, str_trim(current_par))
+        current_par <- ""
+      }
+    } else {
+      current_par <- paste(current_par, line)
+    }
+  }
+  if (current_par != "") {
+    paragraphs <- c(paragraphs, str_trim(current_par))
+  }
+  return(paragraphs)
+}
+
+############################## EXTRACT TEXTBOX #################################
+extract_text_box_content <- function(pdf_file, debug = FALSE) {
+  # Define the prompt text (normalized to lowercase).
+  prompt_text <- "please provide any other information that you think may be relevant and important for this review which has not already been captured in your answers to the above questions."
+
+  # 1. OCR the PDF and combine pages.
+  ocr_pages <- pdf_ocr_text(pdf_file)
+  full_text <- paste(ocr_pages, collapse = "\n")
+
+  # 2. Split the text into lines and trim whitespace.
+  raw_lines <- str_split(full_text, "\n")[[1]]
+  raw_lines <- str_trim(raw_lines)
+
+  if (debug) {
+    cat("Raw OCR Lines:\n")
+    print(raw_lines)
+    cat("\n---\n")
+  }
+
+  # 3. Collapse the raw lines into paragraphs.
+  paragraphs <- collapse_paragraphs(raw_lines)
+  if (debug) {
+    cat("Collapsed Paragraphs:\n")
+    print(paragraphs)
+    cat("\n---\n")
+  }
+
+  # 4. Normalize paragraphs to lowercase for matching.
+  lower_paragraphs <- tolower(paragraphs)
+  if (debug) {
+    cat("Normalized Paragraphs:\n")
+    print(lower_paragraphs)
+    cat("\n---\n")
+  }
+
+  # 5. Look for the paragraph that contains the prompt text.
+  prompt_idx <- which(str_detect(lower_paragraphs, fixed(prompt_text)))
+
+  if (length(prompt_idx) == 0) {
+    message("No prompt found. Returning 'no text box' for text_box.")
+    return("no text box")
+  }
+
+  # Assume the first occurrence is the prompt paragraph.
+  idx <- prompt_idx[1]
+  if (debug) {
+    cat("Prompt found in paragraph index:", idx, "\n")
+    cat("Prompt paragraph:\n", paragraphs[idx], "\n")
+    cat("\n---\n")
+  }
+
+  # 6. Extract the text inside square brackets from the prompt paragraph.
+  match <- str_match(paragraphs[idx], "\\[(.*?)\\]")
+  if (debug) {
+    cat("Regex match for square brackets:\n")
+    print(match)
+    cat("\n---\n")
+  }
+
+  if (is.na(match[1, 2]) || match[1, 2] == "") {
+    answer <- "no text box"
+  } else {
+    answer <- str_trim(match[1, 2])
+  }
+
+  return(answer)
+}
+
+# Wrapper function to return a data frame in long format
+extract_text_box_df <- function(pdf_file, debug = FALSE) {
+  answer <- extract_text_box_content(pdf_file, debug = debug)
+
+  # Create a wide-format data frame
+  df <- data.frame(
+    file = basename(pdf_file),
+    text_box = answer,
+    stringsAsFactors = FALSE
+  )
+
+  # Convert to long format
+  long_df <- df %>%
+    pivot_longer(cols = text_box, names_to = "field", values_to = "value")
+
+  return(long_df)
+}
+
+# ########################## Example Usage ---------------------------------------
+# pdf_file <- here("example_text_box.pdf")
+# result_df <- extract_text_box_df(pdf_file, debug = TRUE)
+# print(result_df)
+
+########################## Example Usage ---------------------------------------
+# pdf_file <- here("pdfs", "pdf1.pdf")
+# result_df <- extract_text_box_df(pdf_file, debug = TRUE)
+# print(result_df)
