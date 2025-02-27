@@ -21,7 +21,7 @@ rename_pdf_files <- function(directory) {
     base <- basename(file)
     # Use a regular expression to check for names like "100-671-517-fs-l1"
     # The regex looks for three groups of digits separated by hyphens followed by "-fs-l1"
-    m <- regexpr("^([0-9]+-[0-9]+-[0-9]+-fs-l1)", base)
+    m <- regexpr("^([0-9]+-[0-9]+-[0-9]+)", base)
 
     if (m[1] != -1) {
       # if a match is found
