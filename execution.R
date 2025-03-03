@@ -6,10 +6,16 @@
 # 5. JOIN BY FILE NAME AND QUESTION NUMBER
 # META: ONE FUNCTION FOR PDFTOOLS, ONE FOR OCR, LOOP TO APPEND DF
 ################################################################################
+# python librares
+py_require("pdf2image")
+py_require("pytesseract")
+py_require("pandas")
+
+# load in python script
+source_python("extract_answers_by_question_pytesseract.py")
 
 # Note you might want to use to rename a batch of files to better names to begin:
 pdf_texts <- process_pdf_files(here("pdfs"))
-
 
 ########################## SINGLE USE ##########################################
 # list file names
@@ -33,6 +39,14 @@ processed_answer_df <- answers_df |>
 # join to questions and context df
 joined_qa_df <- qc_df |>
   left_join(processed_answer_df, by = c("file", "field"))
+
+# Python-based OCR answers
+py_answers_df <- extract_answers_by_question_pytesseract(first_pdf_file) %>%
+  rename(field = question_number)
+
+# Join them in
+joined_qa_df <- joined_qa_df %>%
+  left_join(py_answers_df, by = c("file", "field"))
 
 # question box
 qbox_df <- extract_text_box_df(first_pdf_file, debug = TRUE)
@@ -66,6 +80,14 @@ for (i in seq_along(pdf_files)) {
   # Join questions/context with processed answers
   joined_qa_df <- qc_df %>%
     left_join(processed_answer_df, by = c("file", "field"))
+
+  # Python-based OCR
+  py_answers_df <- extract_answers_by_question_pytesseract(pdf_file) %>%
+    rename(field = question_number)
+
+  # Join Python answers in
+  joined_qa_df <- joined_qa_df %>%
+    left_join(py_answers_df, by = c("file", "field"))
 
   # Extract the text box
   qbox_df <- extract_text_box_df(pdf_file, debug = TRUE)
