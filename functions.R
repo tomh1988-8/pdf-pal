@@ -372,6 +372,8 @@ extract_answers_by_question <- function(pdf_file) {
 # answers_df <- extract_answers_by_question(first_pdf_file)
 # print(answers_df)
 
+########################## extract_answers_by_question_python ##################
+
 ########################## process_answer ######################################
 process_answer <- function(ans) {
   # If ans is NA or empty, return NA
