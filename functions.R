@@ -10,6 +10,9 @@ library(writexl)
 library(tesseract)
 library(testthat)
 library(here)
+library(reticulate)
+library(ellmer)
+library(glue)
 
 ###################### rename_pdf_files ########################################
 rename_pdf_files <- function(directory) {
@@ -372,85 +375,6 @@ extract_answers_by_question <- function(pdf_file) {
 # answers_df <- extract_answers_by_question(first_pdf_file)
 # print(answers_df)
 
-########################## extract_answers_by_question_python ##################
-
-########################## process_answer ######################################
-process_answer <- function(ans) {
-  # If ans is NA or empty, return NA
-  if (is.na(ans) || ans == "") return(NA_character_)
-
-  # This pattern tries to capture 3 parts:
-  #   ^Yes\s*(.*?)\s+No\s*(.*?)  -> The Yes part is group 1, the No part is group 2
-  #   (?:\s+Not applicable\s*(.*))?  -> The Not applicable part is group 3, optional
-  #
-  # Explanation of the pattern:
-  #   ^Yes\s*                -> Start with "Yes" plus optional whitespace
-  #   (.*?)                  -> Capture as few chars as possible into group 1
-  #   \s+No\s*               -> Then "No" plus optional whitespace
-  #   (.*?)                  -> Capture as few chars as possible into group 2
-  #   (?:\s+Not applicable\s*(.*))? -> Optionally capture "Not applicable" plus remainder into group 3
-  pattern <- "^Yes\\s*(.*?)\\s+No\\s*(.*?)(?:\\s+Not\\s*applicable\\s*(.*))?$"
-  m <- str_match(ans, regex(pattern, ignore_case = TRUE))
-
-  # If we cannot parse, return NA
-  if (all(is.na(m))) {
-    return(NA_character_)
-  }
-
-  yes_part <- str_trim(m[2], side = "both")
-  no_part <- str_trim(m[3], side = "both")
-  na_part <- str_trim(m[4], side = "both")
-
-  # If we didn't actually capture a Not-applicable part, set it to ""
-  if (is.na(na_part)) {
-    na_part <- ""
-  }
-
-  # ----- Helper function to check if a portion is "empty" -----
-  is_empty <- function(x) {
-    x %in% c("O", "()")
-  }
-
-  # ----- Step 1: Check for « or «« in each portion -----
-  # If present in yes_part => "Y"; no_part => "N"; na_part => NA
-  has_quote <- function(x) str_detect(x, "«") # matches « or ««
-
-  if (has_quote(yes_part)) return("Y")
-  if (has_quote(no_part)) return("N")
-  if (has_quote(na_part)) return("NA")
-
-  # ----- Step 2: If no quotes, look for alternate markers in each portion. -----
-  # We'll consider ©, (x), or an x in a circle as an alternate marker.
-  # This can be adjusted to your OCR outputs.
-  alt_marker <- function(x) {
-    # "(x)" ignoring case, or "©", or possibly an 'x' in parentheses
-    str_detect(x, regex("\\(x\\)", ignore_case = TRUE)) ||
-      str_detect(x, fixed("©", ignore_case = TRUE))
-  }
-
-  # If the portion is not empty and has the marker => that portion is checked
-  # We check in the order Yes, No, NA. If multiple are marked, we pick the first match.
-
-  if (!is_empty(yes_part) && alt_marker(yes_part)) return("Y")
-  if (!is_empty(no_part) && alt_marker(no_part)) return("N")
-  if (!is_empty(na_part) && alt_marker(na_part)) return("NA")
-
-  # ----- Step 3: If we still haven't found a checked portion, default to "N" or NA. -----
-  return("N")
-}
-
-########################## EXAMPLE USAGE ---------------------------------------
-# List all PDF files in the "pdfs" subdirectory.
-# pdf_files <- list.files(here("pdfs"), pattern = "\\.pdf$", full.names = TRUE)
-# # For testing, process the first PDF file.
-# first_pdf_file <- pdf_files[1]
-# # run the extract_answers_by_question function
-# answers_df <- extract_answers_by_question(first_pdf_file)
-# # process the answers
-# processed_answers <- answers_df %>%
-#   mutate(processed_answer = sapply(answer, process_answer))
-
-############################### collapse_paragraphs (helper) ###################
 ############################### collapse_paragraphs (helper) ###################
 # Helper: Collapse OCR lines into paragraphs (a paragraph = consecutive nonblank lines).
 collapse_paragraphs <- function(lines) {
@@ -567,3 +491,118 @@ extract_text_box_df <- function(pdf_file, debug = FALSE) {
 # pdf_file <- here("pdfs", "pdf1.pdf")
 # result_df <- extract_text_box_df(pdf_file, debug = TRUE)
 # print(result_df)
+
+######################### ZEESHAN TEST ZONE ###################################
+########################## process_answer ######################################
+# Helper: Extract the three parts (Yes, No, Not applicable) from an answer string.
+extract_parts <- function(answer_str) {
+  if (is.na(answer_str) || answer_str == "")
+    return(list(yes = "", no = "", na = ""))
+
+  pattern <- "^Yes\\s*(.*?)\\s+No\\s*(.*?)(?:\\s+Not\\s*applicable\\s*(.*))?$"
+  m <- str_match(answer_str, regex(pattern, ignore_case = TRUE))
+
+  if (all(is.na(m))) return(list(yes = "", no = "", na = ""))
+
+  yes_part <- str_trim(m[2])
+  no_part <- str_trim(m[3])
+  na_part <- ifelse(is.na(m[4]), "", str_trim(m[4]))
+
+  list(yes = yes_part, no = no_part, na = na_part)
+}
+
+# Helper: Define an empty field as "O", "()", or an empty string.
+is_empty <- function(x) {
+  x %in% c("O", "()") || x == ""
+}
+
+# Helper: Look for quote markers (« or ««) in any answer part.
+marker_check <- function(parts_r, parts_py) {
+  if (str_detect(parts_r$yes, "«") || str_detect(parts_py$yes, "«")) return("Y")
+  if (str_detect(parts_r$no, "«") || str_detect(parts_py$no, "«")) return("N")
+  if (str_detect(parts_r$na, "«") || str_detect(parts_py$na, "«"))
+    return("Not applicable")
+  return(NULL)
+}
+
+# Main function: Process two answer sources inclusively.
+process_answer <- function(ans, py_ans) {
+  # ----- Hard-coded Rule 1 -----
+  # If answer exactly equals "Yes O No ()" and py_answer exactly equals "Yes O No",
+  # then we return "N"
+  if (
+    !is.na(ans) &&
+      !is.na(py_ans) &&
+      ans == "Yes O No ()" &&
+      py_ans == "Yes O No"
+  ) {
+    return("N")
+  }
+
+  # Extract parts from both sources.
+  parts_r <- extract_parts(ans)
+  parts_py <- extract_parts(py_ans)
+
+  # ----- Step 1: Marker check -----
+  marker_result <- marker_check(parts_r, parts_py)
+  if (!is.null(marker_result)) return(marker_result)
+
+  # ----- Step 2: Standard empty check -----
+  # Here we consider an option "empty" if both sources are empty per is_empty().
+  yes_empty <- is_empty(parts_r$yes) && is_empty(parts_py$yes)
+  no_empty <- is_empty(parts_r$no) && is_empty(parts_py$no)
+  na_empty <- is_empty(parts_r$na) && is_empty(parts_py$na)
+
+  yes_marked <- !yes_empty
+  no_marked <- !no_empty
+  na_marked <- !na_empty
+
+  num_marked <- sum(yes_marked, no_marked, na_marked)
+
+  # If exactly one option is non-empty, use that as the answer.
+  if (num_marked == 1) {
+    if (yes_marked) return("Y")
+    if (no_marked) return("N")
+    if (na_marked) return("Not applicable")
+  }
+
+  # ----- Step 3: Ambiguous case (returns "man") -----
+  # Final tie-breaker: if one of the sources returns "O" (exactly) for an option,
+  # treat that option as conclusively empty.
+  final_yes <- if (parts_r$yes == "O" || parts_py$yes == "O") {
+    FALSE
+  } else {
+    # Consider the option valid if at least one source is non-empty
+    (!is_empty(parts_r$yes) || !is_empty(parts_py$yes))
+  }
+
+  final_no <- if (parts_r$no == "O" || parts_py$no == "O") {
+    FALSE
+  } else {
+    (!is_empty(parts_r$no) || !is_empty(parts_py$no))
+  }
+
+  final_na <- if (parts_r$na == "O" || parts_py$na == "O") {
+    FALSE
+  } else {
+    (!is_empty(parts_r$na) || !is_empty(parts_py$na))
+  }
+
+  num_final <- sum(final_yes, final_no, final_na)
+  if (num_final == 1) {
+    if (final_yes) return("Y")
+    if (final_no) return("N")
+    if (final_na) return("Not applicable")
+  }
+
+  # If still ambiguous, flag for manual review.
+  return("man")
+}
+
+########################## EXAMPLE USAGE ---------------------------------------
+# # load in test data
+# test_answers <- readRDS(file = "test_answers.rds")
+#
+# # Run test: apply the process_answer function using both answer sources
+# processed_answers <- test_answers |>
+#   mutate(processed_answer = mapply(process_answer, answer, py_answer))

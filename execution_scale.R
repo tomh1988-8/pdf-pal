@@ -38,24 +38,24 @@ for (i in seq_along(pdf_files)) {
 
   # Get questions/context and answers by question
   qc_df <- extract_questions_context(pdf_file)
-  answers_df <- extract_answers_by_question(pdf_file)
+  answers_df <- extract_answers_by_question(pdf_file) |>
+    rename(field = question_number)
+
+  # Python-based OCR answers
+  py_answers_df <- extract_answers_by_question_pytesseract(pdf_file) |>
+    rename(field = question_number)
+
+  # join python and r answers
+  answers_df <- answers_df |>
+    left_join(py_answers_df, by = c("file", "field"))
 
   # Process the answers and rename question_number column to field
-  processed_answer_df <- answers_df %>%
-    mutate(processed_answer = sapply(answer, process_answer)) %>%
-    rename(field = question_number)
+  processed_answer_df <- answers_df |>
+    mutate(processed_answer = mapply(process_answer, answer, py_answer))
 
   # Join questions/context with processed answers
   joined_qa_df <- qc_df %>%
     left_join(processed_answer_df, by = c("file", "field"))
-
-  # Python-based OCR
-  py_answers_df <- extract_answers_by_question_pytesseract(pdf_file) %>%
-    rename(field = question_number)
-
-  # Join Python answers in
-  joined_qa_df <- joined_qa_df %>%
-    left_join(py_answers_df, by = c("file", "field"))
 
   # Extract the text box
   qbox_df <- extract_text_box_df(pdf_file, debug = TRUE)
@@ -66,7 +66,6 @@ for (i in seq_along(pdf_files)) {
   # join in real answers
   combined_df <- combined_df |>
     left_join(real_answers, by = c("file", "field")) |>
-    select(1:4, 6, 5, 7) |>
     mutate(
       q_count = case_when(
         str_detect(field, "question") ~ 1,
@@ -84,11 +83,20 @@ for (i in seq_along(pdf_files)) {
   final_list[[i]] <- combined_df
 }
 
+# Ensure that py_answer is a character in each data frame before binding
+final_list <- lapply(final_list, function(df) {
+  if ("py_answer" %in% names(df)) {
+    df <- df %>% mutate(py_answer = as.character(py_answer))
+  }
+  df
+})
+
+
 # Bind all PDF results together into one final data frame
 final_combined_df <- bind_rows(final_list)
 
 # check performance
-performance <- final_single_df %>%
+performance <- final_combined_df |>
   summarise(
     num_questions = sum(q_count, na.rm = TRUE), # Sum of q_count for total questions
     total_score = sum(score, na.rm = TRUE), # Sum of score for total correct responses
@@ -101,3 +109,9 @@ cat(glue(
   "Correct Responses: {performance$total_score}\n",
   "Accuracy: {round(performance$accuracy, 2)}%"
 ))
+
+####### iteration zone #####
+####### this dataframe helps critique the heuristic and improve ----------------
+failures <- final_combined_df |>
+  filter(q_count == 1 & is.na(score)) |>
+  select(contains("answer"))
