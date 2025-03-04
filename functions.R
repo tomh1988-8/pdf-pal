@@ -11,6 +11,7 @@ library(tesseract)
 library(testthat)
 library(here)
 library(reticulate)
+library(ellmer)
 
 ###################### rename_pdf_files ########################################
 rename_pdf_files <- function(directory) {

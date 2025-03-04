@@ -14,6 +14,9 @@ py_require("pandas")
 # load in python script
 source_python("extract_answers_by_question_pytesseract.py")
 
+# load in real answers
+real_answers <- read.csv(file = "real_answers.csv")
+
 # Note you might want to use to rename a batch of files to better names to begin:
 pdf_texts <- process_pdf_files(here("pdfs"))
 
@@ -53,6 +56,11 @@ qbox_df <- extract_text_box_df(first_pdf_file, debug = TRUE)
 
 # bind_rows to final df
 final_single_df <- bind_rows(header_df, joined_qa_df, qbox_df)
+
+# join in real answers
+final_single_df <- final_single_df |>
+  left_join(real_answers, by = c("file", "field")) |>
+  select(1:4, 6, 5, 7)
 
 ############################ AT SCALE ##########################################
 # List all PDF file names in the "pdfs" folder
@@ -94,6 +102,11 @@ for (i in seq_along(pdf_files)) {
 
   # Combine all parts into one data frame for this PDF
   combined_df <- bind_rows(header_df, joined_qa_df, qbox_df)
+
+  # join in real answers
+  combined_df <- combined_df |>
+    left_join(real_answers, by = c("file", "field")) |>
+    select(1:4, 6, 5, 7)
 
   # Store the combined data frame in the list
   final_list[[i]] <- combined_df
