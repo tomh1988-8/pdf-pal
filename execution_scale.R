@@ -111,6 +111,7 @@ cat(glue(
 ))
 
 ####### iteration zone #####
+####### this dataframe helps critique the heuristic and improve ----------------
 failures <- final_combined_df |>
   filter(q_count == 1 & is.na(score)) |>
   select(contains("answer"))

@@ -527,6 +527,18 @@ marker_check <- function(parts_r, parts_py) {
 
 # Main function: Process two answer sources inclusively.
 process_answer <- function(ans, py_ans) {
+  # ----- Hard-coded Rule 1 -----
+  # If answer exactly equals "Yes O No ()" and py_answer exactly equals "Yes O No",
+  # then we return "N"
+  if (
+    !is.na(ans) &&
+      !is.na(py_ans) &&
+      ans == "Yes O No ()" &&
+      py_ans == "Yes O No"
+  ) {
+    return("N")
+  }
+
   # Extract parts from both sources.
   parts_r <- extract_parts(ans)
   parts_py <- extract_parts(py_ans)
