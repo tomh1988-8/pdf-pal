@@ -47,7 +47,7 @@ answers_df <- answers_df |>
 
 # get processed answers
 processed_answer_df <- answers_df |>
-  mutate(processed_answer = sapply(answer, process_answer))
+  mutate(processed_answer = mapply(process_answer, answer, py_answer))
 
 # join to questions and context df
 joined_qa_df <- qc_df |>
@@ -76,7 +76,7 @@ mutate(
   )
 
 # check performance
-performance <- final_single_df %>%
+performance <- final_single_df |>
   summarise(
     num_questions = sum(q_count, na.rm = TRUE), # Sum of q_count for total questions
     total_score = sum(score, na.rm = TRUE), # Sum of score for total correct responses

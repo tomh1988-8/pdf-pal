@@ -51,7 +51,7 @@ for (i in seq_along(pdf_files)) {
 
   # Process the answers and rename question_number column to field
   processed_answer_df <- answers_df |>
-    mutate(processed_answer = sapply(answer, process_answer))
+    mutate(processed_answer = mapply(process_answer, answer, py_answer))
 
   # Join questions/context with processed answers
   joined_qa_df <- qc_df %>%
@@ -83,11 +83,20 @@ for (i in seq_along(pdf_files)) {
   final_list[[i]] <- combined_df
 }
 
+# Ensure that py_answer is a character in each data frame before binding
+final_list <- lapply(final_list, function(df) {
+  if ("py_answer" %in% names(df)) {
+    df <- df %>% mutate(py_answer = as.character(py_answer))
+  }
+  df
+})
+
+
 # Bind all PDF results together into one final data frame
 final_combined_df <- bind_rows(final_list)
 
 # check performance
-performance <- final_single_df %>%
+performance <- final_combined_df |>
   summarise(
     num_questions = sum(q_count, na.rm = TRUE), # Sum of q_count for total questions
     total_score = sum(score, na.rm = TRUE), # Sum of score for total correct responses
@@ -100,3 +109,8 @@ cat(glue(
   "Correct Responses: {performance$total_score}\n",
   "Accuracy: {round(performance$accuracy, 2)}%"
 ))
+
+####### iteration zone #####
+failures <- final_combined_df |>
+  filter(q_count == 1 & is.na(score)) |>
+  select(contains("answer"))
