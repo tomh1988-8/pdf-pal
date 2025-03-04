@@ -14,7 +14,7 @@ def test_ocr(pdf_file):
 
 if __name__ == "__main__":
     # Example usage
-    pdf_file = "pdfs/pdf-100-591-792.pdf"
+    pdf_file = "pdfs/pdf19.pdf"
     test_ocr(pdf_file)
 
     
