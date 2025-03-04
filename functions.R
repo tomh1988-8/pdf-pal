@@ -520,7 +520,8 @@ is_empty <- function(x) {
 marker_check <- function(parts_r, parts_py) {
   if (str_detect(parts_r$yes, "«") || str_detect(parts_py$yes, "«")) return("Y")
   if (str_detect(parts_r$no, "«") || str_detect(parts_py$no, "«")) return("N")
-  if (str_detect(parts_r$na, "«") || str_detect(parts_py$na, "«")) return("NA")
+  if (str_detect(parts_r$na, "«") || str_detect(parts_py$na, "«"))
+    return("Not applicable")
   return(NULL)
 }
 
@@ -550,7 +551,7 @@ process_answer <- function(ans, py_ans) {
   if (num_marked == 1) {
     if (yes_marked) return("Y")
     if (no_marked) return("N")
-    if (na_marked) return("NA")
+    if (na_marked) return("Not applicable")
   }
 
   # ----- Step 3: Ambiguous case (returns "man") -----
@@ -579,7 +580,7 @@ process_answer <- function(ans, py_ans) {
   if (num_final == 1) {
     if (final_yes) return("Y")
     if (final_no) return("N")
-    if (final_na) return("NA")
+    if (final_na) return("Not applicable")
   }
 
   # If still ambiguous, flag for manual review.
