@@ -42,7 +42,7 @@ for (i in seq_along(pdf_files)) {
     rename(field = question_number)
 
   # Python-based OCR answers
-  py_answers_df <- extract_answers_by_question_pytesseract(first_pdf_file) |>
+  py_answers_df <- extract_answers_by_question_pytesseract(pdf_file) |>
     rename(field = question_number)
 
   # join python and r answers
