@@ -12,6 +12,7 @@ library(testthat)
 library(here)
 library(reticulate)
 library(ellmer)
+library(glue)
 
 ###################### rename_pdf_files ########################################
 rename_pdf_files <- function(directory) {
