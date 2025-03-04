@@ -452,7 +452,6 @@ process_answer <- function(ans) {
 #   mutate(processed_answer = sapply(answer, process_answer))
 
 ############################### collapse_paragraphs (helper) ###################
-############################### collapse_paragraphs (helper) ###################
 # Helper: Collapse OCR lines into paragraphs (a paragraph = consecutive nonblank lines).
 collapse_paragraphs <- function(lines) {
   paragraphs <- character(0)

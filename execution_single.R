@@ -34,24 +34,24 @@ header_df <- extract_header_info(first_pdf_file)
 
 # get questions and context
 qc_df <- extract_questions_context(first_pdf_file)
-answers_df <- extract_answers_by_question(first_pdf_file)
+answers_df <- extract_answers_by_question(first_pdf_file) |>
+  rename(field = question_number)
+
+# Python-based OCR answers
+py_answers_df <- extract_answers_by_question_pytesseract(first_pdf_file) |>
+  rename(field = question_number)
+
+# join python and r answers
+answers_df <- answers_df |>
+  left_join(py_answers_df, by = c("file", "field"))
 
 # get processed answers
 processed_answer_df <- answers_df |>
-  mutate(processed_answer = sapply(answer, process_answer)) |>
-  rename(field = question_number)
+  mutate(processed_answer = sapply(answer, process_answer))
 
 # join to questions and context df
 joined_qa_df <- qc_df |>
   left_join(processed_answer_df, by = c("file", "field"))
-
-# Python-based OCR answers
-py_answers_df <- extract_answers_by_question_pytesseract(first_pdf_file) %>%
-  rename(field = question_number)
-
-# Join them in
-joined_qa_df <- joined_qa_df %>%
-  left_join(py_answers_df, by = c("file", "field"))
 
 # question box
 qbox_df <- extract_text_box_df(first_pdf_file, debug = TRUE)
@@ -61,14 +61,13 @@ final_single_df <- bind_rows(header_df, joined_qa_df, qbox_df)
 
 # join in real answers
 final_single_df <- final_single_df |>
-  left_join(real_answers, by = c("file", "field")) |>
-  select(1:4, 6, 5, 7) |>
-  mutate(
-    q_count = case_when(
-      str_detect(field, "question") ~ 1,
-      TRUE ~ NA_integer_
-    )
-  ) |>
+  left_join(real_answers, by = c("file", "field"))
+mutate(
+  q_count = case_when(
+    str_detect(field, "question") ~ 1,
+    TRUE ~ NA_integer_
+  )
+) |>
   mutate(
     score = case_when(
       processed_answer == real_answer ~ 1,
